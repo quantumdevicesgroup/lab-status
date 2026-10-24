@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Berkeley Quantum Devices Group - Lab Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #ffffff;
+            color: #1f2328;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px 16px;
+            padding: 16px 24px;
+            border-bottom: 1px solid #d0d7de;
+        }
+        header h1 { font-size: 20px; font-weight: 600; }
+        .header-info { color: #24292f; font-size: 13px; }
+        .time-buttons { display: flex; gap: 6px; align-items: center; }
+        .time-btn {
+            background: #f0f0f0;
+            border: 1px solid #d0d7de;
+            color: #24292f;
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .time-btn:hover { border-color: #0969da; color: #1f2328; }
+        .time-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+            padding: 20px 24px;
+        }
+        .card {
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #d0d7de;
+        }
+        .card-header h2 { font-size: 15px; font-weight: 600; }
+        .latest-value { font-size: 13px; color: #24292f; }
+        .latest-value span { font-weight: 600; }
+        .latest-value span.ok { color: #1a7f37; }
+        .latest-value span.alert { color: #cf222e; }
+        .card-status {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 6px 16px;
+            border-bottom: 1px solid #d0d7de;
+            font-size: 12px;
+            color: #24292f;
+        }
+        .status-item { display: flex; align-items: center; gap: 4px; }
+        .status-item .check { color: #1a7f37; }
+        .status-item .cross { color: #cf222e; }
+        .chart-container { width: 100%; height: 250px; }
+        .angstrom-section { padding: 0 24px 20px; }
+        .angstrom-card {
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            overflow: hidden;
+            width: calc((100% - 32px) / 3);
+        }
+        .angstrom-card .card-header { padding: 12px 16px; border-bottom: 1px solid #d0d7de; }
+        .angstrom-card .card-header h2 { font-size: 15px; font-weight: 600; }
+        .angstrom-chart { width: 100%; height: 250px; }
+        .trace-toggles { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 16px; border-bottom: 1px solid #d0d7de; }
+        .trace-toggle {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 13px; color: #24292f; cursor: pointer; user-select: none;
+        }
+        .trace-toggle input { cursor: pointer; }
+        .banner {
+            display: none;
+            margin: 16px 24px 0;
+            padding: 10px 14px;
+            border: 1px solid #cf222e;
+            border-radius: 6px;
+            background: rgba(207, 34, 46, 0.1);
+            color: #cf222e;
+            font-size: 13px;
+        }
+        .no-data {
+            display: flex; align-items: center; justify-content: center;
+            height: 100%; color: #656d76; font-size: 13px;
+        }
+        @media (max-width: 1000px) {
+            .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .angstrom-card { width: calc((100% - 16px) / 2); }
+        }
+        @media (max-width: 600px) {
+            header { padding: 12px 16px; }
+            .grid { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+            .angstrom-section { padding: 0 16px 16px; }
+            .angstrom-card { width: 100%; }
+            .banner { margin: 12px 16px 0; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Berkeley Quantum Devices Group - Lab Dashboard</h1>
+        <div class="time-buttons">
+            <button class="time-btn" data-window="1h">1 Hour</button>
+            <button class="time-btn active" data-window="24h">24 Hours</button>
+            <button class="time-btn" data-window="3d">3 Days</button>
+            <button class="time-btn" data-window="1w">1 Week</button>
+            <button class="time-btn" data-window="1m">1 Month</button>
+            <button class="time-btn" data-window="6m">6 Months</button>
+        </div>
+        <div class="header-info" style="text-align: right;">
+            <span id="site-link" style="display:none; font-size: 13px;">Return to <a href="https://quantumdevices.berkeley.edu" style="color: #0969da; text-decoration: none;">Quantum Devices Group</a> website</span>
+            <br id="site-link-br" style="display:none;">
+            <span id="last-updated"></span>
+        </div>
+    </header>
+    <div class="banner" id="banner"></div>
+    <div class="grid" id="grid"></div>
+    <div class="angstrom-section">
+        <div class="angstrom-card">
+            <div class="card-header">
+                <h2>Angstrom</h2>
+                <div class="latest-value">Evap: <span id="val-angstrom-evap"></span> | Oxid: <span id="val-angstrom-oxid"></span></div>
+            </div>
+            <div class="trace-toggles" id="angstrom-toggles">
+                <label class="trace-toggle" style="margin-left:auto">
+                    <input type="checkbox" id="angstrom-log-toggle" checked> Log Scale
+                </label>
+            </div>
+            <div class="angstrom-chart" id="angstrom-chart"></div>
+        </div>
+    </div>
+
+    <script>
+        const ORDER = ['DF1', 'DF2', 'DF3', 's200a', 's200b', 'Lakeshore331'];
+        const DF_IDS = new Set(['DF1', 'DF2', 'DF3']);
+        const S200_IDS = new Set(['s200a', 's200b']);
+        const REFRESH_MS = 60000;
+        // The same page serves the lab dashboard (Flask, /api/data) and the public GitHub
+        // Pages copy, which reads one file written by export_static.py (1 week by default).
+        const STATIC_URL = 'data/status.json';
+        const STATIC_STALE_MIN = 30;
+        const WINDOW_HOURS = { '1h': 1, '24h': 24, '3d': 72, '1w': 168, '1m': 720, '6m': 4320 };
+        // Normal logging intervals stay under ~20 min; a longer gap is an outage, and the
+        // line is broken there instead of drawn straight across. Thinned data (the live
+        // 1m/6m views) has wider spacing, so the threshold also scales with the median step.
+        const GAP_MIN = 30;
+        let staticMode = false;
+        let currentWindow = '24h';
+        let lastData = null;
+        let showStill = { DF1: true, DF2: true, DF3: true };
+        let mxcLogScale = { DF1: true, DF2: true, DF3: true };
+        let showPressure = { s200a: false, s200b: false };
+
+        const ANGSTROM_TRACES = [
+            { channel: 'Quantum.Evaporation.Pressure', label: 'Evap', color: '#0969da', yaxis: 'y' },
+            { channel: 'Quantum.Oxidation.Pressure', label: 'Oxid', color: '#bf5700', yaxis: 'y' },
+            { channel: 'Quantum.Evaporation.Cryo Temperature', label: 'Cryo', color: '#1a7f37', yaxis: 'y2' },
+        ];
+        let angstromVisible = { 'Quantum.Evaporation.Pressure': true, 'Quantum.Oxidation.Pressure': true, 'Quantum.Evaporation.Cryo Temperature': false };
+        let lastAngstromData = null;
+        let angstromLogScale = true;
+
+        function formatVal(v, unit) {
+            if (v == null) return '--';
+            if (unit === 'K' && v < 1) return (v * 1000).toFixed(1) + ' mK';
+            if (v >= 1000) return v.toFixed(0) + ' ' + unit;
+            if (v >= 100) return v.toFixed(1) + ' ' + unit;
+            return v.toFixed(2) + ' ' + unit;
+        }
+
+        function buildCards() {
+            const grid = document.getElementById('grid');
+            for (const id of ORDER) {
+                let statusRow = '';
+                if (DF_IDS.has(id)) {
+                    statusRow = `
+                        <div class="card-status" id="status-${id}">
+                            <div class="status-item">Water In: <span id="water-${id}">--</span></div>
+                            <div class="status-item">Compressor: <span id="comp-${id}">--</span></div>
+                            <label class="trace-toggle" style="margin-left:auto">
+                                <input type="checkbox" id="toggle-log-${id}" checked> Log Scale
+                            </label>
+                            <label class="trace-toggle">
+                                <input type="checkbox" id="toggle-still-${id}" checked> Still
+                            </label>
+                        </div>`;
+                } else if (S200_IDS.has(id)) {
+                    statusRow = `
+                        <div class="card-status" id="status-${id}">
+                            <label class="trace-toggle" style="margin-left:auto">
+                                <input type="checkbox" id="toggle-pressure-${id}"> Pressure
+                            </label>
+                        </div>`;
+                }
+                grid.innerHTML += `
+                    <div class="card" id="card-${id}">
+                        <div class="card-header">
+                            <h2 id="label-${id}"></h2>
+                            <div class="latest-value">Latest: <span id="val-${id}"></span></div>
+                        </div>${statusRow}
+                        <div class="chart-container" id="chart-${id}"></div>
+                    </div>`;
+            }
+        }
+
+        // Timestamps are naive lab-local strings; parsing both sides the same way keeps the
+        // comparison consistent whatever the viewer's time zone.
+        function parseLocal(s) { return new Date(s.replace(' ', 'T')); }
+
+        // /api/data already returns the requested window; the static file is cut here.
+        function windowed(series, end) {
+            if (!staticMode) return series;
+            const cutoff = parseLocal(end).getTime() - WINDOW_HOURS[currentWindow] * 3600e3;
+            const i = series.timestamps.findIndex(t => parseLocal(t).getTime() >= cutoff);
+            const from = i < 0 ? series.timestamps.length : i;
+            return { ...series, timestamps: series.timestamps.slice(from), values: series.values.slice(from) };
+        }
+
+        function breakGaps(series) {
+            const ms = series.timestamps.map(t => parseLocal(t).getTime());
+            const steps = ms.slice(1).map((m, i) => m - ms[i]).sort((a, b) => a - b);
+            const median = steps.length ? steps[Math.floor(steps.length / 2)] : 0;
+            const limit = Math.max(GAP_MIN * 60e3, 3 * median);
+            const ts = [], vs = [];
+            series.timestamps.forEach((t, i) => {
+                if (i > 0 && ms[i] - ms[i - 1] > limit) { ts.push(t); vs.push(null); }
+                ts.push(t); vs.push(series.values[i]);
+            });
+            return { ...series, timestamps: ts, values: vs };
+        }
+
+        function showNoData(divId) {
+            Plotly.purge(divId);
+            document.getElementById(divId).innerHTML = '<div class="no-data">No data in this window</div>';
+        }
+
+        function clearNoData(divId) {
+            const empty = document.querySelector('#' + divId + ' .no-data');
+            if (empty) empty.remove();
+        }
+
+        function setBanner(text) {
+            const banner = document.getElementById('banner');
+            banner.textContent = text || '';
+            banner.style.display = text ? 'block' : 'none';
+        }
+
+        function renderChart(divId, data, overlay) {
+            if (!data.values.length && !(overlay && overlay.values.length)) { showNoData(divId); return; }
+            clearNoData(divId);
+            data = breakGaps(data);
+            if (overlay) overlay = breakGaps(overlay);
+            const colors = data.values.map(v => v > 5 ? '#cf222e' : '#1a7f37');
+            // An overlay switched on but without data in this window draws as a plain chart.
+            const hasOverlay = overlay && overlay.timestamps.length > 0;
+            const traces = [{
+                x: data.timestamps,
+                y: data.values,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: data.traceName || 'Value',
+                line: { color: '#1a7f37', width: 0.75 },
+                marker: { color: colors, size: 3 },
+                showlegend: hasOverlay,
+            }];
+            if (hasOverlay) {
+                traces.push({
+                    x: overlay.timestamps,
+                    y: overlay.values,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: overlay.name,
+                    line: { color: '#0969da', width: 0.75 },
+                    marker: { size: 3 },
+                    yaxis: 'y2',
+                });
+            }
+            const layout = {
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'rgba(0,0,0,0.03)',
+                // Log overlays label ticks as 2.5×10⁹, which needs the extra room on the right.
+                margin: { t: hasOverlay ? 26 : 8, r: hasOverlay ? (overlay.logScale ? 76 : 52) : 12, b: 36, l: 52 },
+                xaxis: {
+                    type: 'date',
+                    gridcolor: 'rgba(0,0,0,0.1)',
+                    tickfont: { color: '#24292f', size: 10 },
+                },
+                yaxis: {
+                    title: { text: data.unit, font: { color: hasOverlay ? '#1a7f37' : '#24292f', size: 11 } },
+                    gridcolor: 'rgba(0,0,0,0.1)',
+                    tickfont: { color: '#24292f', size: 10 },
+                    type: data.logScale ? 'log' : 'linear',
+                },
+                font: { color: '#24292f' },
+            };
+            if (hasOverlay) {
+                layout.yaxis2 = {
+                    title: { text: overlay.unit, font: { color: '#0969da', size: 11 } },
+                    tickfont: { color: '#0969da', size: 10 },
+                    overlaying: 'y',
+                    side: 'right',
+                    gridcolor: 'rgba(0,0,0,0.0)',
+                    type: overlay.logScale ? 'log' : 'linear',
+                    exponentformat: 'power',
+                };
+                // Above the plot, so it never covers the right-hand axis labels.
+                layout.legend = { x: 0, y: 1, xanchor: 'left', yanchor: 'bottom', orientation: 'h', font: { color: '#24292f', size: 11 } };
+            }
+            Plotly.react(divId, traces, layout, { responsive: true, displayModeBar: false });
+        }
+
+        document.getElementById('angstrom-log-toggle').addEventListener('change', function() {
+            angstromLogScale = this.checked;
+            renderAngstromChart();
+        });
+
+        function buildAngstromToggles() {
+            const container = document.getElementById('angstrom-toggles');
+            for (const t of ANGSTROM_TRACES) {
+                const lbl = document.createElement('label');
+                lbl.className = 'trace-toggle';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = angstromVisible[t.channel];
+                cb.addEventListener('change', () => {
+                    angstromVisible[t.channel] = cb.checked;
+                    renderAngstromChart();
+                });
+                const swatch = document.createElement('span');
+                swatch.style.cssText = 'width:10px;height:10px;border-radius:2px;background:' + t.color;
+                lbl.appendChild(cb);
+                lbl.appendChild(swatch);
+                lbl.appendChild(document.createTextNode(' ' + t.label));
+                container.appendChild(lbl);
+            }
+        }
+
+        function renderAngstromChart() {
+            if (!lastAngstromData) return;
+            const traces = [];
+            let hasPressure = false;
+            let hasTemp = false;
+            for (const t of ANGSTROM_TRACES) {
+                if (!angstromVisible[t.channel]) continue;
+                const d = lastAngstromData[t.channel];
+                if (!d || !d.values.length) continue;
+                const g = breakGaps(d);
+                const isTemp = t.channel.includes('Temperature');
+                if (isTemp) hasTemp = true; else hasPressure = true;
+                traces.push({
+                    x: g.timestamps, y: g.values,
+                    type: 'scatter', mode: 'lines+markers',
+                    name: t.label,
+                    line: { color: t.color, width: 0.75 },
+                    marker: { size: 3 },
+                    yaxis: isTemp ? 'y2' : 'y',
+                });
+            }
+            if (!traces.length) { showNoData('angstrom-chart'); return; }
+            clearNoData('angstrom-chart');
+            const layout = {
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'rgba(0,0,0,0.03)',
+                margin: { t: 26, r: hasPressure && hasTemp ? 60 : 12, b: 36, l: 60 },
+                xaxis: { type: 'date', gridcolor: 'rgba(0,0,0,0.1)', tickfont: { color: '#24292f', size: 10 } },
+                yaxis: {
+                    title: { text: hasPressure ? 'nTorr' : '', font: { color: '#24292f', size: 11 } },
+                    gridcolor: 'rgba(0,0,0,0.1)',
+                    tickfont: { color: '#24292f', size: 10 },
+                    autorange: true,
+                    type: angstromLogScale ? 'log' : 'linear',
+                    exponentformat: 'power',
+                    visible: hasPressure,
+                },
+                yaxis2: {
+                    title: { text: hasTemp ? 'K' : '', font: { color: '#24292f', size: 11 } },
+                    gridcolor: 'rgba(0,0,0,0.1)',
+                    tickfont: { color: '#24292f', size: 10 },
+                    overlaying: 'y',
+                    side: 'right',
+                    autorange: true,
+                    type: angstromLogScale ? 'log' : 'linear',
+                    exponentformat: 'power',
+                    visible: hasTemp,
+                },
+                legend: { x: 0, y: 1, xanchor: 'left', yanchor: 'bottom', orientation: 'h', font: { color: '#24292f', size: 11 } },
+                font: { color: '#24292f' },
+            };
+            Plotly.react('angstrom-chart', traces, layout, { responsive: true, displayModeBar: false });
+        }
+
+        async function detectMode() {
+            try {
+                const resp = await fetch(STATIC_URL, { method: 'HEAD', cache: 'no-store' });
+                staticMode = resp.ok;
+            } catch (e) {
+                staticMode = false;
+            }
+            if (staticMode) {
+                document.getElementById('site-link').style.display = '';
+                document.getElementById('site-link-br').style.display = '';
+            }
+        }
+
+        async function refresh() {
+            try {
+                const url = staticMode ? STATIC_URL : '/api/data?window=' + currentWindow;
+                const resp = await fetch(url, { cache: 'no-cache' });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                lastData = await resp.json();
+                setBanner(null);
+                render();
+            } catch (e) {
+                console.error('Refresh failed:', e);
+                setBanner('Could not load data. Retrying every minute.');
+            }
+        }
+
+        // Toggles and (in static mode) window changes redraw from lastData without fetching.
+        function render() {
+            const data = lastData;
+            if (!data) return;
+            const end = data.updated;
+            if (staticMode) {
+                // Offer only the windows the exported file covers.
+                document.querySelectorAll('.time-btn').forEach(btn => {
+                    btn.hidden = WINDOW_HOURS[btn.dataset.window] > data.hours;
+                });
+                if (WINDOW_HOURS[currentWindow] > data.hours) selectWindow('24h');
+                const ageMin = (Date.now() - new Date(data.exported_at).getTime()) / 60000;
+                if (ageMin > STATIC_STALE_MIN) {
+                    setBanner('Data is stale: last export was ' + Math.round(ageMin) +
+                        ' min ago. The lab monitor may be offline.');
+                }
+            }
+            document.getElementById('last-updated').textContent = 'Updated: ' + end + ' (Berkeley time)';
+            for (const id of ORDER) {
+                const inst = windowed(data.instruments[id], end);
+                document.getElementById('label-' + id).textContent = inst.label;
+                const valEl = document.getElementById('val-' + id);
+                valEl.textContent = formatVal(inst.latest, inst.unit);
+                valEl.className = (inst.latest != null && inst.latest >= 5) ? 'alert' : 'ok';
+                if (DF_IDS.has(id)) inst.logScale = mxcLogScale[id];
+                let overlay = null;
+                if (DF_IDS.has(id) && showStill[id] && inst.ch5_timestamps) {
+                    overlay = windowed({ timestamps: inst.ch5_timestamps, values: inst.ch5_values, name: 'Still', unit: 'K' }, end);
+                    inst.traceName = 'MXC';
+                } else if (S200_IDS.has(id) && showPressure[id] && inst.pressure_timestamps) {
+                    overlay = windowed({ timestamps: inst.pressure_timestamps, values: inst.pressure_values, name: 'P', unit: 'nTorr', logScale: true }, end);
+                    inst.traceName = 'T';
+                }
+                renderChart('chart-' + id, inst, overlay);
+                if (DF_IDS.has(id)) {
+                    const waterEl = document.getElementById('water-' + id);
+                    if (inst.water_temp != null) {
+                        const waterOk = inst.water_temp < 21;
+                        waterEl.innerHTML = '<span style="color:' + (waterOk ? '#1a7f37' : '#cf222e') + '">' + inst.water_temp.toFixed(1) + ' °C</span>';
+                    } else {
+                        waterEl.textContent = '--';
+                    }
+                    const compEl = document.getElementById('comp-' + id);
+                    if (inst.compressor_on === true) {
+                        compEl.innerHTML = '<span class="check">&#10003;</span>';
+                    } else if (inst.compressor_on === false) {
+                        compEl.innerHTML = '<span class="cross">&#10007;</span>';
+                    } else {
+                        compEl.textContent = '--';
+                    }
+                }
+            }
+            // Angstrom
+            if (data.angstrom) {
+                lastAngstromData = {};
+                for (const [ch, d] of Object.entries(data.angstrom)) {
+                    lastAngstromData[ch] = windowed(d, end);
+                }
+                const evap = data.angstrom['Quantum.Evaporation.Pressure'];
+                const oxid = data.angstrom['Quantum.Oxidation.Pressure'];
+                const fmtTorr = v => (v / 1e9).toExponential(1).replace('e+', 'E').replace('e-', 'E-') + ' Torr';
+                document.getElementById('val-angstrom-evap').textContent = evap && evap.latest != null ? fmtTorr(evap.latest) : '--';
+                document.getElementById('val-angstrom-oxid').textContent = oxid && oxid.latest != null ? fmtTorr(oxid.latest) : '--';
+                renderAngstromChart();
+            }
+        }
+
+        function selectWindow(w) {
+            document.querySelector('.time-btn.active').classList.remove('active');
+            document.querySelector('.time-btn[data-window="' + w + '"]').classList.add('active');
+            currentWindow = w;
+        }
+
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectWindow(btn.dataset.window);
+                history.replaceState(null, '', '#' + currentWindow);
+                if (staticMode) render(); else refresh();
+            });
+        });
+
+        // A link like .../#3d opens on that window.
+        if (location.hash.slice(1) in WINDOW_HOURS) selectWindow(location.hash.slice(1));
+
+        buildCards();
+        for (const id of DF_IDS) {
+            const logCb = document.getElementById('toggle-log-' + id);
+            if (logCb) {
+                logCb.addEventListener('change', () => {
+                    mxcLogScale[id] = logCb.checked;
+                    render();
+                });
+            }
+            const cb = document.getElementById('toggle-still-' + id);
+            if (cb) {
+                cb.addEventListener('change', () => {
+                    showStill[id] = cb.checked;
+                    render();
+                });
+            }
+        }
+        for (const id of S200_IDS) {
+            const cb = document.getElementById('toggle-pressure-' + id);
+            if (cb) {
+                cb.addEventListener('change', () => {
+                    showPressure[id] = cb.checked;
+                    render();
+                });
+            }
+        }
+        buildAngstromToggles();
+        detectMode().then(() => {
+            refresh();
+            setInterval(refresh, REFRESH_MS);
+        });
+    </script>
+</body>
+</html>
